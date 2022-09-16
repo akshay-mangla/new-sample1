@@ -1,0 +1,28 @@
+version: 0.2
+phases:
+  install:
+    runtime-versions:
+      python: 3.7
+    commands:
+      - echo "Installing CloudFormation linting tool"
+      - pip install cfn-lint
+  pre_build:
+    commands:
+      - echo "Starting pre_build - $(date)"
+      - echo "Running cfn-lint"
+      - cfn-lint --version
+      - cfn-lint ${CODEBUILD_SRC_DIR}/template.yml
+      - echo "Completed pre_build - $(date)"
+  build:
+    commands:
+      - echo "Starting build - $(date)"
+      - echo "Completed build - $(date)"
+  post_build:
+    commands:
+      - echo "Starting post_build - $(date)"
+      - echo "Completed post_build - $(date)"
+artifacts:
+  files:
+    - ${TEMPLATE_PATH}
+    - ${PARAMETER_FILE_NAME}
+  discard-paths: no

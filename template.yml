@@ -1,0 +1,88 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: >
+    MD IDS CoCreate RDS Backup/Restore
+
+Parameters:
+  SnapshotIdentifier:
+      Type: String
+      Default: ''
+
+Conditions:
+  UseDBSnapshot: !Not [!Equals [!Ref SnapshotIdentifier, '']]
+  CreateNewDB: !Equals [!Ref SnapshotIdentifier, '']
+
+Resources:
+  RdsDatabase:
+    Type: "AWS::RDS::DBInstance"
+    Properties:
+      AllocatedStorage: '20'
+      DBInstanceClass: db.t4g.micro
+      Engine: "postgres"
+      EngineVersion: "13.4"
+      LicenseModel: "postgresql-license"
+      # 
+      DBSnapshotIdentifier: !If [UseDBSnapshot, !Ref SnapshotIdentifier, !Ref "AWS::NoValue"]
+      MasterUsername: !If [CreateNewDB, !Join ['', ['{{resolve:secretsmanager:', !Ref RdsMasterCredentials, ':SecretString:username}}' ]], !Ref "AWS::NoValue"]
+      MasterUserPassword: !If [CreateNewDB, !Join ['', ['{{resolve:secretsmanager:', !Ref RdsMasterCredentials, ':SecretString:password}}' ]], !Ref "AWS::NoValue"]
+      # 
+      PubliclyAccessible: false
+      DBSubnetGroupName: !Ref RdsDatabaseSubnet
+      StorageEncrypted: true
+      VPCSecurityGroups:
+        - !Ref RdsInstanceSecurityGroup
+
+  RdsMasterCredentials:
+    Type: 'AWS::SecretsManager::Secret'
+    Properties:
+      Description: RDS master user password
+      GenerateSecretString:
+        SecretStringTemplate: '{"username": "rdsmaster"}'
+        GenerateStringKey: "password"
+        ExcludeCharacters: '"@/'
+        PasswordLength: 16
+
+  SecretRDSInstanceAttachment:
+    Type: "AWS::SecretsManager::SecretTargetAttachment"
+    Properties:
+      SecretId: !Ref RdsMasterCredentials
+      TargetId: !Ref RdsDatabase
+      TargetType: AWS::RDS::DBInstance
+
+  RdsDatabaseSubnet:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: "DB Subnet"
+      SubnetIds: !Split [ ",", !ImportValue PrivateSubnets]
+
+  RdsInstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Restricts access to the RDS database instance
+      VpcId: !ImportValue DefaultVPC
+
+Outputs:
+  DatabaseName:
+    Value: !Ref RdsDatabase
+    Export:
+      Name: !Sub "${AWS::StackName}-RdsDatabaseName"
+  DatabaseEndpointAddress:
+    Value: !GetAtt RdsDatabase.Endpoint.Address
+    Export:
+      Name: !Sub "${AWS::StackName}-RdsDatabaseEndpointAddress"
+  DatabaseEndpointPort:
+    Value: !GetAtt RdsDatabase.Endpoint.Port
+    Export:
+      Name: !Sub "${AWS::StackName}-RdsDatabaseEndpointPort"
+  RdsMasterCredentialsName:
+    Value: !Select [ 6, !Split [ ":", !Ref RdsMasterCredentials ] ]
+    Export:
+      Name: !Sub "${AWS::StackName}-RdsMasterCredentialsName"
+  RdsMasterCredentialsArn:
+    Value: !Ref RdsMasterCredentials
+    Export:
+      Name: !Sub "${AWS::StackName}-RdsMasterCredentialsArn"
+  RdsSecurityGroupId:
+    Value: !Ref RdsInstanceSecurityGroup
+    Export:
+      Name: !Sub "${AWS::StackName}-RdsSecurityGroupId"

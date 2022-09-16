@@ -1,0 +1,18 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: >
+  Simulates the DefaultVPC and PrivateSubnets exports that are available in the Landing Zone accounts
+
+Resources:
+  NonResource:
+    Type: AWS::CloudFormation::WaitConditionHandle
+
+Outputs:
+  DefaultVPC:
+    Value: vpc-f2fd3199
+    Export:
+      Name: DefaultVPC
+  PrivateSubnets:
+    Value: subnet-9fd94cd3,subnet-612bdf0a,subnet-42a88a38
+    Export:
+      Name: PrivateSubnets

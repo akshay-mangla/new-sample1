@@ -1,0 +1,16 @@
+{
+  "Parameters": {},
+  "Tags": {
+    "DeployEnvironment": "prod",
+    "AppName": "md-cocreate-rds-backup-restore",
+    "CostCenter": "100B168",
+    "CostCenterApprover": "EB97538",
+    "SystemOwner": "EB97538",
+    "SystemCustodian": "C213220",
+    "PrimaryItContact": "C213220",
+    "Level1BusinessArea": "MD IDS",
+    "DataClassification": "Orange",
+    "Hipaa": "No"
+  },
+  "StackPolicy": {}
+}

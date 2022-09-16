@@ -1,0 +1,170 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: >
+    MD IDS CoCreate RDS Backup/Restore DB UI
+
+Parameters:
+  DbStackName:
+    Type: String
+  PhpPgAdminSubnet:
+    Type: AWS::EC2::Subnet::Id
+    Description: The subnet in which the PhpPgAdmin server will be deployed.
+  AppName:
+    Type: String
+  CostCenter:
+    Type: String
+  CostCenterApprover:
+    Type: String
+  SystemOwner:
+    Type: String
+  SystemCustodian:
+    Type: String
+  PrimaryItContact:
+    Type: String
+  Level1BusinessArea:
+    Type: String
+  DataClassification:
+    Type: String
+    AllowedValues:
+      - "Green"
+      - "Yellow"
+      - "Orange"
+      - "Red"
+      - "TBD"
+  Hipaa:
+    Type: String
+    AllowedValues:
+      - "Yes"
+      - "No"
+      - "TBD"
+
+Resources:
+  WebSecurityGroup:
+    Type: Custom::LillySecurityGroup
+    Properties:
+      ServiceToken: !ImportValue RVM-LambdaARN
+      DefinitionName: LillyNetworkHttpAccess
+      VpcId: !ImportValue DefaultVPC
+      Tags:
+        ProjectName: !Ref AppName
+        SystemCustodian: !Ref SystemCustodian
+        SystemOwner: !Ref SystemOwner
+        PrimaryItContact: !Ref PrimaryItContact
+        CostCenter: !Ref CostCenter
+        CostCenterApprover: !Ref CostCenterApprover
+        Level1BusinessArea: !Ref Level1BusinessArea
+        DataClassification: !Ref DataClassification
+        Hipaa: !Ref Hipaa
+
+  # PhpPgAdminServerInstanceRole:
+  #   Type: AWS::IAM::Role
+  #   Properties:
+  #     PermissionsBoundary: !Sub "arn:aws:iam::${AWS::AccountId}:policy/LZ-Sandbox-Boundary"
+  #     AssumeRolePolicyDocument:
+  #       Version: 2012-10-17
+  #       Statement:
+  #         - Action:
+  #             - 'sts:AssumeRole'
+  #           Effect: Allow
+  #           Principal:
+  #             Service:
+  #               - ec2.amazonaws.com
+  #     Policies:
+
+  # PhpPgAdminServerInstanceProfile:
+  #   Type: AWS::IAM::InstanceProfile
+  #   Properties:
+  #     Roles:
+  #       - !Ref
+
+  PhpPgAdminServer:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-00399ec92321828f5
+      InstanceType: t2.micro
+      KeyName: test-szewczyk
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          SubnetId: !Ref PhpPgAdminSubnet
+          DeviceIndex: 0
+          DeleteOnTermination: true
+          GroupSet:
+            - !GetAtt WebSecurityGroup.GroupId
+            - !Ref PhpPgAdminInstanceSecurityGroup
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash -xe
+          apt-get update -y
+          mkdir -p /opt/aws/bin
+          wget https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz
+          python3 -m easy_install --script-dir /opt/aws/bin aws-cfn-bootstrap-py3-latest.tar.gz
+          /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource PhpPgAdminServer --region ${AWS::Region} --configsets ec2_setup
+          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource PhpPgAdminServer --region ${AWS::Region}
+    Metadata:
+      AWS::CloudFormation::Init:
+        configSets:
+          ec2_setup:
+            - install_phppgadmin
+            - install_apache
+            - configure_apache_php
+        install_phppgadmin:
+          packages:
+            apt:
+              phppgadmin: []
+              php-pgsql: []
+        install_apache:
+          packages:
+            apt:
+              apache2: []
+              php: []
+              libapache2-mod-php: []
+        configure_apache_php:
+          files:
+            /etc/apache2/sites-enabled/phppgadmin.conf:
+              content: |
+                Alias /phppgadmin /usr/share/phppgadmin
+                <Directory /usr/share/phppgadmin>
+                  <IfModule mod_dir.c>
+                      DirectoryIndex index.php
+                  </IfModule>
+                  AllowOverride None
+                  Require all granted
+                  <IfModule mod_php.c>
+                      php_flag magicquotes_gpc Off
+                      php_flag trackvars On
+                  </IfModule>
+                  <IfModule !mod_php.c>
+                    <IfModule mod_actions.c>
+                      <IfModule mod_cgi.c>
+                          AddType application/x-httpd-php .php
+                          Action application/x-httpd-php /cgi-bin/php
+                      </IfModule>
+                      <IfModule mod_cgid.c>
+                          AddType application/x-httpd-php .php
+                          Action application/x-httpd-php /cgi-bin/php
+                      </IfModule>
+                    </IfModule>
+                  </IfModule>
+                </Directory>
+          commands:
+            01_start_apache:
+              command: systemctl restart apache2
+
+  PhpPgAdminInstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Join [' ', ['Allow PhpPgAdmin access to', Fn::ImportValue: !Sub "${DbStackName}-RdsDatabaseName" ]]
+      VpcId: !ImportValue DefaultVPC
+
+  DbIngress01:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      IpProtocol: tcp
+      FromPort: 
+        Fn::ImportValue: !Sub "${DbStackName}-RdsDatabaseEndpointPort"
+      ToPort: 
+        Fn::ImportValue: !Sub "${DbStackName}-RdsDatabaseEndpointPort"
+      SourceSecurityGroupId: !GetAtt PhpPgAdminInstanceSecurityGroup.GroupId
+      Description: Database Access
+      GroupId: 
+        Fn::ImportValue: !Sub "${DbStackName}-RdsSecurityGroupId"
