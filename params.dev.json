@@ -10,7 +10,7 @@
     "DataClassification": "Orange",
     "Hipaa": "No",
     "DbStackName": "md-cocreate-rds-backup-restore-pipeline-stack-deployment",
-    "PgAdminSubnet": "subnet-9fd94cd3"
+    "PgAdminSubnet": "subnet-0f9e703fac3c6a7ec"
   },
   "Tags": {
     "DeployEnvironment": "dev",
