@@ -1,88 +1,210 @@
 AWSTemplateFormatVersion: "2010-09-09"
 
 Description: >
-    MD IDS CoCreate RDS Backup/Restore
-
+    MD IDS CoCreate RDS Backup/Restore DB UI
 Parameters:
-  SnapshotIdentifier:
-      Type: String
-      Default: ''
-
-Conditions:
-  UseDBSnapshot: !Not [!Equals [!Ref SnapshotIdentifier, '']]
-  CreateNewDB: !Equals [!Ref SnapshotIdentifier, '']
+  DbStackName:
+    Type: String
+  PgAdminSubnet:
+    Type: AWS::EC2::Subnet::Id
+    Description: The subnet in which the PgAdmin server will be deployed.
+  AppName:
+    Type: String
+  CostCenter:
+    Type: String
+  CostCenterApprover:
+    Type: String
+  SystemOwner:
+    Type: String
+  SystemCustodian:
+    Type: String
+  PrimaryItContact:
+    Type: String
+  Level1BusinessArea:
+    Type: String
+  DataClassification:
+    Type: String
+    AllowedValues:
+      - "Green"
+      - "Yellow"
+      - "Orange"
+      - "Red"
+      - "TBD"
+  Hipaa:
+    Type: String
+    AllowedValues:
+      - "Yes"
+      - "No"
+      - "TBD"
 
 Resources:
-  RdsDatabase:
-    Type: "AWS::RDS::DBInstance"
+  WebSecurityGroup:
+    Type: Custom::LillySecurityGroup
     Properties:
-      AllocatedStorage: '20'
-      DBInstanceClass: db.t4g.micro
-      Engine: "postgres"
-      EngineVersion: "13.4"
-      LicenseModel: "postgresql-license"
-      # 
-      DBSnapshotIdentifier: !If [UseDBSnapshot, !Ref SnapshotIdentifier, !Ref "AWS::NoValue"]
-      MasterUsername: !If [CreateNewDB, !Join ['', ['{{resolve:secretsmanager:', !Ref RdsMasterCredentials, ':SecretString:username}}' ]], !Ref "AWS::NoValue"]
-      MasterUserPassword: !If [CreateNewDB, !Join ['', ['{{resolve:secretsmanager:', !Ref RdsMasterCredentials, ':SecretString:password}}' ]], !Ref "AWS::NoValue"]
-      # 
-      PubliclyAccessible: false
-      DBSubnetGroupName: !Ref RdsDatabaseSubnet
-      StorageEncrypted: true
-      VPCSecurityGroups:
-        - !Ref RdsInstanceSecurityGroup
+      ServiceToken: !ImportValue RVM-LambdaARN
+      DefinitionName: LillyNetworkHttpAccess
+      VpcId: !ImportValue DefaultVPC
+      Tags:
+        ProjectName: !Ref AppName
+        SystemCustodian: !Ref SystemCustodian
+        SystemOwner: !Ref SystemOwner
+        PrimaryItContact: !Ref PrimaryItContact
+        CostCenter: !Ref CostCenter
+        CostCenterApprover: !Ref CostCenterApprover
+        Level1BusinessArea: !Ref Level1BusinessArea
+        DataClassification: !Ref DataClassification
+        Hipaa: !Ref Hipaa
 
-  RdsMasterCredentials:
+  PgAdminServerInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      PermissionsBoundary: !Sub "arn:aws:iam::${AWS::AccountId}:policy/LZ-Sandbox-Boundary"
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action:
+              - 'sts:AssumeRole'
+            Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+      Policies:
+        - PolicyName: "PgAdminServer-Secrets-Access"
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !Ref PgAdminCredentials
+
+
+  PgAdminServerInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref PgAdminServerInstanceRole
+
+  PgAdminServer:
+    Type: AWS::EC2::Instance
+    DependsOn: PgAdminCredentials
+    Properties:
+      ImageId: ami-00399ec92321828f5
+      InstanceType: t2.micro
+      IamInstanceProfile: !Ref PgAdminServerInstanceProfile
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          SubnetId: !Ref PgAdminSubnet
+          DeviceIndex: 0
+          DeleteOnTermination: true
+          GroupSet:
+            - !GetAtt WebSecurityGroup.GroupId
+            - !Ref PgAdminInstanceSecurityGroup
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash -xe
+          apt-get update -y
+          mkdir -p /opt/aws/bin
+          wget https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz
+          python3 -m easy_install --script-dir /opt/aws/bin aws-cfn-bootstrap-py3-latest.tar.gz
+          /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource PgAdminServer --region ${AWS::Region} --configsets ec2_setup
+          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource PgAdminServer --region ${AWS::Region}
+    Metadata:
+      AWS::CloudFormation::Init:
+        configSets:
+          ec2_setup:
+            - update_apt_for_pgadmin_install
+            - install_pgadmin
+            - configure_pgadmin
+        update_apt_for_pgadmin_install:
+          commands:
+            01_update_apt:
+              command: sudo apt-get update
+            02_upgrade_ca_certificates:
+              command: sudo apt-get install ca-certificates -y
+            03_add_pgadmin_repo_to_apt_db:
+              command: sudo curl https://www.pgadmin.org/static/packages_pgadmin_org.pub | sudo apt-key add
+            04_update_apt_db:
+              command: sudo sh -c 'echo "deb https://ftp.postgresql.org/pub/pgadmin/pgadmin4/apt/$(lsb_release -cs) pgadmin4 main" > /etc/apt/sources.list.d/pgadmin4.list && apt update'
+        install_pgadmin:
+          packages:
+            apt:
+              pgadmin4: []
+              pgadmin4-web: []
+        configure_pgadmin:
+          packages:
+            apt:
+              expect: []
+              jq: []
+              awscli: []
+          files:
+            /home/ubuntu/setup-web.exp:
+              content: |
+                #!/usr/bin/expect -f
+                set email [lindex $argv 0];
+                set password [lindex $argv 1];
+                spawn sudo /usr/pgadmin4/bin/setup-web.sh
+                expect "Email address: "
+                send -- "${email}\n"
+                expect "Password: "
+                send -- "${password}\n"
+                expect "Retype password: "
+                send -- "${password}\n"
+                expect "(y/n)? "
+                send -- "y\n"
+                expect "(y/n)? "
+                send -- "y\n"
+                expect eof
+              mode: "000755"
+          commands:
+            01_run_pgadmin_setup:
+              command: !Sub "/home/ubuntu/setup-web.exp $(aws secretsmanager get-secret-value --secret-id ${PgAdminCredentials} --region ${AWS::Region} --query SecretString | jq --raw-output | jq -r .email) $(aws secretsmanager get-secret-value --secret-id ${PgAdminCredentials} --region ${AWS::Region} --query SecretString | jq --raw-output | jq -r .password)"
+
+  PgAdminCredentials:
     Type: 'AWS::SecretsManager::Secret'
     Properties:
-      Description: RDS master user password
+      Description: Credentials for logging into pgAdmin
       GenerateSecretString:
-        SecretStringTemplate: '{"username": "rdsmaster"}'
+        SecretStringTemplate: '{"email": "pgadmin@example.com"}'
         GenerateStringKey: "password"
-        ExcludeCharacters: '"@/'
         PasswordLength: 16
 
-  SecretRDSInstanceAttachment:
-    Type: "AWS::SecretsManager::SecretTargetAttachment"
+  PgAdminCredentialsResourcePolicy:
+    Type: 'AWS::SecretsManager::ResourcePolicy'
     Properties:
-      SecretId: !Ref RdsMasterCredentials
-      TargetId: !Ref RdsDatabase
-      TargetType: AWS::RDS::DBInstance
+      SecretId: !Ref PgAdminCredentials
+      ResourcePolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Resource: "*"
+            Action: secretsmanager:GetSecretValue
+            Effect: Allow
+            Principal:
+              AWS: !GetAtt PgAdminServerInstanceRole.Arn 
 
-  RdsDatabaseSubnet:
-    Type: AWS::RDS::DBSubnetGroup
-    Properties:
-      DBSubnetGroupDescription: "DB Subnet"
-      SubnetIds: !Split [ ",", !ImportValue PrivateSubnets]
-
-  RdsInstanceSecurityGroup:
+  PgAdminInstanceSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Restricts access to the RDS database instance
+      GroupDescription: !Join [' ', ['Allow pgAdmin access to', Fn::ImportValue: !Sub "${DbStackName}-RdsDatabaseName" ]]
       VpcId: !ImportValue DefaultVPC
 
+  DbIngress01:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      IpProtocol: tcp
+      FromPort: 
+        Fn::ImportValue: !Sub "${DbStackName}-RdsDatabaseEndpointPort"
+      ToPort: 
+        Fn::ImportValue: !Sub "${DbStackName}-RdsDatabaseEndpointPort"
+      SourceSecurityGroupId: !GetAtt PgAdminInstanceSecurityGroup.GroupId
+      Description: Database Access
+      GroupId: 
+        Fn::ImportValue: !Sub "${DbStackName}-RdsSecurityGroupId"
+
 Outputs:
-  DatabaseName:
-    Value: !Ref RdsDatabase
-    Export:
-      Name: !Sub "${AWS::StackName}-RdsDatabaseName"
-  DatabaseEndpointAddress:
-    Value: !GetAtt RdsDatabase.Endpoint.Address
-    Export:
-      Name: !Sub "${AWS::StackName}-RdsDatabaseEndpointAddress"
-  DatabaseEndpointPort:
-    Value: !GetAtt RdsDatabase.Endpoint.Port
-    Export:
-      Name: !Sub "${AWS::StackName}-RdsDatabaseEndpointPort"
-  RdsMasterCredentialsName:
-    Value: !Select [ 6, !Split [ ":", !Ref RdsMasterCredentials ] ]
-    Export:
-      Name: !Sub "${AWS::StackName}-RdsMasterCredentialsName"
-  RdsMasterCredentialsArn:
-    Value: !Ref RdsMasterCredentials
-    Export:
-      Name: !Sub "${AWS::StackName}-RdsMasterCredentialsArn"
-  RdsSecurityGroupId:
-    Value: !Ref RdsInstanceSecurityGroup
-    Export:
-      Name: !Sub "${AWS::StackName}-RdsSecurityGroupId"
+  PgAdminUrl:
+    Value: !Join
+      - ""
+      - - "http://"
+        - !GetAtt PgAdminServer.PublicDnsName
+        - "/pgadmin4"
