@@ -65,24 +65,24 @@ Outputs:
   DatabaseName:
     Value: !Ref RdsDatabase
     Export:
-      Name: !Sub "${AWS::StackName}-RdsDatabaseName"
+      Name: !Sub "md-cocreate-rds-backup-restore-pipeline-stack-deployment-RdsDatabaseName"
   DatabaseEndpointAddress:
     Value: !GetAtt RdsDatabase.Endpoint.Address
     Export:
-      Name: !Sub "${AWS::StackName}-RdsDatabaseEndpointAddress"
+      Name: !Sub "md-cocreate-rds-backup-restore-pipeline-stack-deployment-RdsDatabaseEndpointAddress"
   DatabaseEndpointPort:
     Value: !GetAtt RdsDatabase.Endpoint.Port
     Export:
-      Name: !Sub "${AWS::StackName}-RdsDatabaseEndpointPort"
+      Name: !Sub "md-cocreate-rds-backup-restore-pipeline-stack-deployment-RdsDatabaseEndpointPort"
   RdsMasterCredentialsName:
     Value: !Select [ 6, !Split [ ":", !Ref RdsMasterCredentials ] ]
     Export:
-      Name: !Sub "${AWS::StackName}-RdsMasterCredentialsName"
+      Name: !Sub "md-cocreate-rds-backup-restore-pipeline-stack-deployment-RdsMasterCredentialsName"
   RdsMasterCredentialsArn:
     Value: !Ref RdsMasterCredentials
     Export:
-      Name: !Sub "${AWS::StackName}-RdsMasterCredentialsArn"
+      Name: !Sub "md-cocreate-rds-backup-restore-pipeline-stack-deployment-RdsMasterCredentialsArn"
   RdsSecurityGroupId:
     Value: !Ref RdsInstanceSecurityGroup
     Export:
-      Name: !Sub "${AWS::StackName}-RdsSecurityGroupId"
+      Name: !Sub "md-cocreate-rds-backup-restore-pipeline-stack-deployment-RdsSecurityGroupId"
