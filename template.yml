@@ -89,7 +89,7 @@ Resources:
     Type: AWS::EC2::Instance
     DependsOn: PgAdminCredentials
     Properties:
-      ImageId: ami-00399ec92321828f5
+      ImageId: ami-05fa00d4c63e32376
       InstanceType: t2.micro
       IamInstanceProfile: !Ref PgAdminServerInstanceProfile
       NetworkInterfaces:
