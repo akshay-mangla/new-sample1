@@ -65,24 +65,24 @@ Outputs:
   DatabaseName:
     Value: !Ref RdsDatabase
     Export:
-      Name: !Sub "md-cocreate-rds-backup-restore-pipeline-stack-deployment-RdsDatabaseName"
+      Name: "md-cocreate-rds-backup-restore-pipeline-stack-deployment-RdsDatabaseName"
   DatabaseEndpointAddress:
     Value: !GetAtt RdsDatabase.Endpoint.Address
     Export:
-      Name: !Sub "md-cocreate-rds-backup-restore-pipeline-stack-deployment-RdsDatabaseEndpointAddress"
+      Name: "md-cocreate-rds-backup-restore-pipeline-stack-deployment-RdsDatabaseEndpointAddress"
   DatabaseEndpointPort:
     Value: !GetAtt RdsDatabase.Endpoint.Port
     Export:
-      Name: !Sub "md-cocreate-rds-backup-restore-pipeline-stack-deployment-RdsDatabaseEndpointPort"
+      Name: "md-cocreate-rds-backup-restore-pipeline-stack-deployment-RdsDatabaseEndpointPort"
   RdsMasterCredentialsName:
     Value: !Select [ 6, !Split [ ":", !Ref RdsMasterCredentials ] ]
     Export:
-      Name: !Sub "md-cocreate-rds-backup-restore-pipeline-stack-deployment-RdsMasterCredentialsName"
+      Name: "md-cocreate-rds-backup-restore-pipeline-stack-deployment-RdsMasterCredentialsName"
   RdsMasterCredentialsArn:
     Value: !Ref RdsMasterCredentials
     Export:
-      Name: !Sub "md-cocreate-rds-backup-restore-pipeline-stack-deployment-RdsMasterCredentialsArn"
+      Name: "md-cocreate-rds-backup-restore-pipeline-stack-deployment-RdsMasterCredentialsArn"
   RdsSecurityGroupId:
     Value: !Ref RdsInstanceSecurityGroup
     Export:
-      Name: !Sub "md-cocreate-rds-backup-restore-pipeline-stack-deployment-RdsSecurityGroupId"
+      Name: "md-cocreate-rds-backup-restore-pipeline-stack-deployment-RdsSecurityGroupId"
