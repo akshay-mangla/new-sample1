@@ -67,7 +67,7 @@ Resources:
       GroupDescription: Allow PostgreSQL to client host
       VpcId: !ImportValue DefaultVPC
       SecurityGroupIngress:
-        - IpProtocol: postgres
+        - IpProtocol: tcp
           FromPort: 5432
           ToPort: 5432
           CidrIp: 0.0.0.0/0
