@@ -60,6 +60,23 @@ Resources:
     Properties:
       GroupDescription: Restricts access to the RDS database instance
       VpcId: !ImportValue DefaultVPC
+      
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow PostgreSQL to client host
+      VpcId: !ImportValue DefaultVPC
+      SecurityGroupIngress:
+        - IpProtocol: PostgreSQL
+          FromPort: 5432
+          ToPort: 5432
+         CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+ 
 
 Outputs:
   DatabaseName:
